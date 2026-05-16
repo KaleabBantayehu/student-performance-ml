@@ -53,8 +53,14 @@ class StudentModelTrainer:
                 X, y, test_size=test_size, random_state=random_state
             )
 
-            logger.info(f"Initializing RandomForestClassifier with random_state={random_state}...")
-            self.model = RandomForestClassifier(n_estimators=100, random_state=random_state)
+            logger.info(f"Initializing RandomForestClassifier with optimized parameters to reduce overfitting...")
+            self.model = RandomForestClassifier(
+                n_estimators=150, 
+                max_depth=5, 
+                min_samples_split=10, 
+                min_samples_leaf=4, 
+                random_state=random_state
+            )
 
             logger.info("Starting model training...")
             self.model.fit(X_train, y_train)
