@@ -1,76 +1,85 @@
-import pandas as pd
-import numpy as np
+import logging
+import sys
 from src.preprocess import DataPreprocessor
-from sklearn.model_selection import train_test_split
+from src.train_model import StudentModelTrainer
+from src.evaluate import ModelEvaluator
+from src.predict import PerformancePredictor
 
-def test_pipeline():
-    """
-    Validates the preprocessing pipeline and checks data quality.
-    """
-    print("\n" + "="*60)
-    print(" SECTION 1: PREPROCESSING TEST & QUALITY CHECK ".center(60))
-    print("="*60)
-    
-    data_file = "data/student_data.csv"
-    processor = DataPreprocessor(data_path=data_file)
-    
-    try:
-        X, y, feature_names = processor.process()
-        
-        print(f"[OK] Dataset loaded successfully")
-        print(f"Features shape (X): {X.shape}")
-        print(f"Labels shape (y): {y.shape}")
-        
-        # --- PREPROCESSING VALIDATION LOGIC ---
-        print("\n--- Data Integrity & Encoding Check ---")
-        
-        # Check categorical encoding (assignments_completed is usually index 3)
-        print(f"First 5 rows of 'assignments_completed' (encoded): {X[:5, 3]}")
-        
-        # Check for NaN values
-        nan_count = np.isnan(X).sum()
-        print(f"Total NaN values in features: {nan_count}")
-        
-        # Check label encoding mapping
-        mapping = dict(zip(processor.label_encoder.classes_, range(len(processor.label_encoder.classes_))))
-        print(f"Label Mapping: {mapping}")
-        print(f"First 5 encoded labels: {y[:5]}")
+# Configure professional logging
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger(__name__)
 
-    except Exception as e:
-        print(f"\n[ERROR] Preprocessing Pipeline failed: {e}")
-        raise e
-
-def main():
+def run_ml_workflow():
     """
-    Main execution flow for data preparation and splitting.
-    """
-    print("\n" + "="*60)
-    print(" SECTION 2: DATA PREPARATION & SPLITTING ".center(60))
-    print("="*60)
+    Coordinates the end-to-end Machine Learning workflow for the 
+    Student Performance Prediction System.
     
-    data_file = "data/student_data.csv"
-    processor = DataPreprocessor(data_path=data_file)
+    Workflow Sequence:
+    1. Preprocessing: Load, validate, and encode the raw dataset.
+    2. Training: Split data and train the RandomForest model.
+    3. Evaluation: Generate performance metrics and confusion matrix.
+    4. Inference: Run a sample prediction to verify end-to-end functionality.
+    """
+    
+    print("\n" + "="*75)
+    print(" STUDENT PERFORMANCE PREDICTION SYSTEM: END-TO-END WORKFLOW ".center(75))
+    print("="*75)
+
+    # 1. Configuration
+    data_path = "data/student_data.csv"
     
     try:
-        # 1. Preprocess
-        X, y, feature_names = processor.process()
+        # --- PHASE 1: PREPROCESSING ---
+        print("\n[PHASE 1] DATA PREPROCESSING")
+        print("-" * 30)
+        preprocessor = DataPreprocessor(data_path=data_path)
+        X, y, feature_names = preprocessor.process()
+        print(f"[OK] Data processed successfully. Total Samples: {len(X)}")
 
-        # 2. Split the data
-        # test_size=0.2 means 20% for testing, 80% for training
-        # random_state=42 ensures reproducibility
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
-        )
+        # --- PHASE 2: MODEL TRAINING & PERSISTENCE ---
+        print("\n[PHASE 2] MODEL TRAINING & PERSISTENCE")
+        print("-" * 30)
+        trainer = StudentModelTrainer()
+        # The trainer handles splitting, training, and automatic artifact saving
+        model, X_test, y_test = trainer.train(X, y, encoder=preprocessor.label_encoder)
+        print(f"[OK] Model and Encoder saved to 'models/' directory.")
 
-        print(f"Total samples processed: {len(X)}")
-        print(f"Training set size:      {X_train.shape[0]}")
-        print(f"Testing set size:       {X_test.shape[0]}")
-        print("\n[SUCCESS] System initialization complete. Ready for model training.")
+        # --- PHASE 3: EVALUATION ---
+        # The evaluator provides detailed metrics, a confusion matrix, and feature importance analysis
+        print("\n[PHASE 3] PERFORMANCE EVALUATION")
+        print("-" * 30)
+        evaluator = ModelEvaluator(target_names=preprocessor.label_encoder.classes_)
+        y_pred = model.predict(X_test)
+        evaluator.evaluate(y_test, y_pred)
         
+        # Analyze which features most influence the predictions
+        evaluator.analyze_feature_importance(model, feature_names)
+
+        # --- PHASE 4: SAMPLE INFERENCE (PREDICTION) ---
+        print("\n[PHASE 4] SAMPLE INFERENCE TEST")
+        print("-" * 30)
+        predictor = PerformancePredictor()
+        
+        # Sample Test: High engagement student
+        # Order: [study_hours, attendance, sleep_hours, assignments_completed, previous_gpa]
+        sample_input = [8.5, 92, 7.5, 1, 3.7]
+        result = predictor.predict(sample_input)
+        
+        print(f"\nTEST DATA  : {sample_input}")
+        print(f"PREDICTION : {result}")
+        
+        print("\n" + "="*75)
+        print(" WORKFLOW EXECUTION COMPLETED SUCCESSFULLY ".center(75))
+        print("="*75 + "\n")
+
     except Exception as e:
-        print(f"\n[ERROR] Main execution flow failed: {e}")
+        print(f"\n[CRITICAL ERROR] Pipeline failed: {str(e)}")
+        logger.error(f"Execution halted during workflow: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    # Execution Flow: Run test first, then main
-    test_pipeline()
-    main()
+    run_ml_workflow()
