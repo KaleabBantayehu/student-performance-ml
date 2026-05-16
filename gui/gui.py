@@ -1,5 +1,11 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext
+import sys
+import os
+
+# Add project root to path to allow imports from src
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.predict import PerformancePredictor
 
 class AIStudentPerformancePredictor:
     def __init__(self, root):
@@ -8,6 +14,14 @@ class AIStudentPerformancePredictor:
         self.root.geometry("800x700")
         self.root.minsize(700, 600)
         
+        # Initialize Predictor
+        try:
+            self.predictor = PerformancePredictor()
+        except Exception as e:
+            messagebox.showerror("Model Error", f"Failed to load ML models: {e}")
+            self.root.destroy()
+            return
+
         # Configure Styles
         self._setup_styles()
         
@@ -30,7 +44,7 @@ class AIStudentPerformancePredictor:
 
     def _setup_styles(self):
         self.style = ttk.Style()
-        self.style.theme_use('clam')  # Using 'clam' as a base for better customization
+        self.style.theme_use('clam')
         
         # Colors
         self.colors = {
@@ -140,7 +154,7 @@ class AIStudentPerformancePredictor:
         # Grid Configuration
         self.results_lf.columnconfigure(1, weight=1)
         
-        # Result Fields placeholders
+        # Result Fields
         self.res_labels = {}
         
         result_items = [
@@ -192,30 +206,110 @@ class AIStudentPerformancePredictor:
         # Spacer
         ttk.Frame(btn_frame).pack(side=tk.LEFT, expand=True)
 
+    def _validate_inputs(self):
+        """Validates all user inputs. Returns a list of floats if valid, else None."""
+        try:
+            # Check empty fields or dropdown
+            for key, var in self.vars.items():
+                val = var.get().strip()
+                if not val or val == "Select...":
+                    messagebox.showwarning("Missing Data", f"Please provide a value for {key.replace('_', ' ').title()}.")
+                    return None
+
+            # Numeric checks
+            sh = float(self.vars["study_hours"].get())
+            att = float(self.vars["attendance"].get())
+            slh = float(self.vars["sleep_hours"].get())
+            gpa = float(self.vars["prev_gpa"].get())
+            
+            if any(x < 0 for x in [sh, att, slh, gpa]):
+                messagebox.showerror("Input Error", "Values cannot be negative.")
+                return None
+            
+            if att > 100:
+                messagebox.showerror("Input Error", "Attendance cannot exceed 100%.")
+                return None
+            
+            if gpa > 4.0:
+                messagebox.showerror("Input Error", "GPA cannot exceed 4.0.")
+                return None
+
+            # Map Assignments
+            asgn = 1 if self.vars["assignments"].get() == "Yes" else 0
+            
+            # Feature order: [study_hours, attendance, sleep_hours, assignments_completed, previous_gpa]
+            return [sh, att, slh, asgn, gpa]
+
+        except ValueError:
+            messagebox.showerror("Input Error", "Please enter valid numeric values for all numeric fields.")
+            return None
+
     def _on_predict(self):
-        """
-        Placeholder logic for prediction. 
-        Will be connected to the ML pipeline in the next milestone.
-        """
-        # Simple validation check (placeholders)
-        for key, var in self.vars.items():
-            val = var.get().strip()
-            if not val or val == "Select...":
-                messagebox.showwarning("Missing Data", f"Please provide a valid value for {key.replace('_', ' ').title()}.")
-                return
+        """Real prediction logic integrated with the ML model."""
+        features = self._validate_inputs()
+        if not features:
+            return
         
-        # Update placeholders with dummy data
-        self.res_labels["grade"].config(text="A- (Excellent)", foreground=self.colors["success"])
-        self.res_labels["confidence"].config(text="92.4%")
-        self.res_labels["risk"].config(text="LOW", foreground=self.colors["success"])
+        try:
+            # Perform prediction
+            grade, confidence = self.predictor.predict_with_proba(features)
+            
+            # Map Risk Level
+            risk_map = {
+                "Excellent": ("LOW", self.colors["success"]),
+                "Good": ("LOW", self.colors["success"]),
+                "Average": ("MODERATE", self.colors["warning"]),
+                "At Risk": ("HIGH", self.colors["danger"])
+            }
+            risk_level, risk_color = risk_map.get(grade, ("UNKNOWN", self.colors["secondary"]))
+
+            # Update Labels
+            self.res_labels["grade"].config(text=grade, foreground=risk_color)
+            self.res_labels["confidence"].config(text=f"{confidence*100:.2f}%")
+            self.res_labels["risk"].config(text=risk_level, foreground=risk_color)
+            
+            # Generate Explanation
+            self._update_explanation(grade, risk_level, features)
+
+        except Exception as e:
+            messagebox.showerror("Prediction Error", f"An error occurred during prediction: {e}")
+
+    def _update_explanation(self, grade, risk_level, features):
+        """Generates a dynamic explanation based on student data and results."""
+        sh, att, slh, asgn, gpa = features
         
+        explanation = f"Analysis Result: {grade}\n\n"
+        explanation += f"The system classifies your performance as {grade.upper()} with a risk level of {risk_level}.\n\n"
+        
+        # Factor Analysis
+        explanation += "Key Contributing Factors:\n"
+        if att < 75:
+            explanation += f"- Low Attendance ({att}%): This is a significant risk factor.\n"
+        else:
+            explanation += f"- Strong Attendance ({att}%): Helps maintain your current standing.\n"
+            
+        if sh < 5:
+            explanation += f"- Low Weekly Study Hours ({sh}h): Suggests a need for more academic engagement.\n"
+        elif sh > 15:
+            explanation += f"- Excellent Study Commitment ({sh}h): Strongly supports high grades.\n"
+            
+        if asgn == 0:
+            explanation += "- Incomplete Assignments: This negatively impacts your predicted performance.\n"
+            
+        if gpa < 2.5:
+            explanation += f"- Low Previous GPA ({gpa}): Indicates a historical trend that needs attention.\n"
+
+        explanation += "\nRecommendation: "
+        if risk_level == "HIGH":
+            explanation += "Seek immediate tutoring and improve attendance to avoid academic probation."
+        elif risk_level == "MODERATE":
+            explanation += "Focus on completing all assignments and increasing study hours to move to a higher bracket."
+        else:
+            explanation += "Keep up the excellent work! Maintain your current routine to stay consistent."
+
         self.explanation_box.config(state=tk.NORMAL)
         self.explanation_box.delete(1.0, tk.END)
-        self.explanation_box.insert(tk.END, 
-            "The model predicts a high performance level based on your consistent study hours and high attendance. "
-            "Maintaining a GPA above 3.5 while completing all assignments significantly reduces academic risk. "
-            "\n\nRecommendation: Continue your current study routine and ensure you get at least 7 hours of sleep."
-        )
+        self.explanation_box.insert(tk.END, explanation)
         self.explanation_box.config(state=tk.DISABLED)
 
     def _on_clear(self):
@@ -243,7 +337,5 @@ class AIStudentPerformancePredictor:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    # Attempt to set an icon if available (optional)
-    # root.iconbitmap("path_to_icon.ico") 
     app = AIStudentPerformancePredictor(root)
     root.mainloop()

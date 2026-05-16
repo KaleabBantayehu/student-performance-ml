@@ -84,6 +84,36 @@ class PerformancePredictor:
             logger.error(f"Prediction failed for input {student_features}: {str(e)}")
             raise
 
+    def predict_with_proba(self, student_features):
+        """
+        Performs prediction and returns the category along with the confidence score.
+        
+        Args:
+            student_features (list): Input features.
+            
+        Returns:
+            tuple: (predicted_label, confidence_score)
+        """
+        try:
+            features_array = np.array(student_features).reshape(1, -1)
+            
+            # Get probabilities for all classes
+            probabilities = self.model.predict_proba(features_array)[0]
+            
+            # Get the index of the highest probability
+            max_prob_idx = np.argmax(probabilities)
+            confidence = probabilities[max_prob_idx]
+            
+            # Get the label
+            numeric_prediction = [self.model.classes_[max_prob_idx]]
+            readable_label = self.encoder.inverse_transform(numeric_prediction)[0]
+            
+            return readable_label, confidence
+            
+        except Exception as e:
+            logger.error(f"Detailed prediction failed: {str(e)}")
+            raise
+
 if __name__ == "__main__":
     # Internal verification and demonstration
     print("\n--- Student Performance Prediction Test ---")
