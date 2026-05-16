@@ -113,6 +113,34 @@ class PerformancePredictor:
         except Exception as e:
             logger.error(f"Detailed prediction failed: {str(e)}")
             raise
+    def get_all_probabilities(self, student_features):
+        """
+        Returns a dictionary mapping each class label to its prediction probability.
+        """
+        try:
+            features_array = np.array(student_features).reshape(1, -1)
+            probabilities = self.model.predict_proba(features_array)[0]
+            
+            # Map probabilities to readable labels
+            class_labels = self.encoder.inverse_transform(self.model.classes_)
+            return dict(zip(class_labels, probabilities))
+        except Exception as e:
+            logger.error(f"Failed to get all probabilities: {e}")
+            raise
+
+    def get_feature_importances(self):
+        """
+        Returns feature importance scores if supported by the model.
+        """
+        try:
+            if hasattr(self.model, 'feature_importances_'):
+                features = ['Study Hours', 'Attendance', 'Sleep Hours', 'Assignments', 'Prev GPA']
+                importances = self.model.feature_importances_
+                return dict(zip(features, importances))
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get feature importances: {e}")
+            return None
 
 if __name__ == "__main__":
     # Internal verification and demonstration
